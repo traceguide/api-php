@@ -1,5 +1,13 @@
 # Traceguide Instrumentation Library
 
-Available on [Packagist](https://packagist.org/packages/traceguide/api-php).
+## Install with Composer
+
+```bash
+composer require traceguide/api-php
+```
+
+## Instrumentation Example
+
+
 
 
