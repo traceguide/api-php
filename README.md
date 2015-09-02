@@ -1,5 +1,5 @@
 # Traceguide Instrumentation Library
 
-Available via [Packagist](https://packagist.org/packages/traceguide/api-php).
+Available on [Packagist](https://packagist.org/packages/traceguide/api-php).
 
 
