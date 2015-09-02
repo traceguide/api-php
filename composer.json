@@ -8,10 +8,5 @@
     },
     "require-dev": {
         "phpdocumentor/phpdocumentor": "2.*"
-    },
-     "extra": {
-        "branch-alias": {
-            "dev-master": "1.0.x-beta"
-        }
     }
 }
