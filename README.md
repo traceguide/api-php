@@ -9,5 +9,10 @@ composer require traceguide/api-php
 ## Instrumentation Example
 
 
+```php
+require __DIR__ . '/vendor/autoload.php';
+
+```
+
 
 
