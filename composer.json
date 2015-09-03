@@ -10,9 +10,9 @@
         "phpdocumentor/phpdocumentor": "2.*"
     },
     "autoload": {
-        "psr-4": {
-            "Traceguide\\": "lib/"
-        }
+        "files": [
+            "lib/Traceguide.php"
+        ]
     },
     "version": "1.0.6"
 }
