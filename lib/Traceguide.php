@@ -68,22 +68,37 @@ class Traceguide {
         return new Traceguide\Client\ClientRuntime($opts);
     }
 
+    /*
+     * Runtime API
+     */
 
 
-    public function infof($fmt) {
+    public static function startSpan() {
+        return self::getInstance()->startSpan();
+    }
+
+    public static function infof($fmt) {
         self::getInstance()->_log('I', $fmt, func_get_args());
     }
 
-    public function warnf($fmt) {
+    public static function warnf($fmt) {
         self::getInstance()->_log('W', $fmt, func_get_args());
     }
 
-    public function errorf($fmt) {
+    public static function errorf($fmt) {
         self::getInstance()->_log('E', $fmt, func_get_args());
     }
 
-    public function fatalf($fmt) {
+    public static function fatalf($fmt) {
         self::getInstance()->_log('F', $fmt, func_get_args());
-    } 
+    }
+
+    public static function flush() {
+        self::getInstance()->flush();
+    }
+
+    public static function disable() {
+        self::getInstance()->disable();
+    }
 
 };
