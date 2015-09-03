@@ -8,5 +8,6 @@
     },
     "require-dev": {
         "phpdocumentor/phpdocumentor": "2.*"
-    }
+    },
+    "version": "1.0.5"
 }
