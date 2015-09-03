@@ -9,5 +9,10 @@
     "require-dev": {
         "phpdocumentor/phpdocumentor": "2.*"
     },
-    "version": "1.0.5"
+    "autoload": {
+        "psr-4": {
+            "Traceguide\\": "lib/"
+        }
+    },
+    "version": "1.0.6"
 }
