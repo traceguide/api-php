@@ -203,7 +203,10 @@ class ClientRuntime implements \Traceguide\Runtime {
         $this->flushIfNeeded();
     }
 
-    protected function _log($level, $fmt, $allArgs) {
+    /**
+     * For internal use only.
+     */
+    public function _log($level, $fmt, $allArgs) {
         // The $allArgs variable contains the $fmt string
         array_shift($allArgs);
         $text = vsprintf($fmt, $allArgs);
