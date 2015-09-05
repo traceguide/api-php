@@ -28,7 +28,7 @@ $span->finish();
 
 ## License
 
-[The MIT License](https://opensource.org/licenses/MIT).
+[The MIT License](LICENSE).
 
 Copyright (c) 2015, Resonance Labs.
 
