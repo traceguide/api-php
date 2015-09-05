@@ -26,5 +26,12 @@ for ($i = 0; $i < 10; $i++) {
 $span->finish();
 ```
 
+## License
+
+[The MIT License](https://opensource.org/licenses/MIT).
+
+Copyright (c) 2015, Resonance Labs.
+
+
 
 

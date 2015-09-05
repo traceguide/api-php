@@ -31,7 +31,7 @@ class ClientRuntime implements \Traceguide\Runtime {
         $this->_util = new Util();
 
         $this->_options = array_merge(array(
-            'service_host'          => 'traceguide-api.mttr.to',
+            'service_host'          => 'api.traceguide.io',
             'service_port'          => 9998,
 
             'max_log_records'       => 1000,
