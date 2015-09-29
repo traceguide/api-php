@@ -6,7 +6,7 @@ $vendorDir = dirname(dirname(__FILE__));
 $baseDir = dirname($vendorDir);
 
 return array(
-    'phpDocumentor' => array($vendorDir . '/phpdocumentor/reflection-docblock/src', $vendorDir . '/phpdocumentor/reflection/src', $vendorDir . '/phpdocumentor/reflection/tests/unit', $vendorDir . '/phpdocumentor/reflection/tests/mocks', $vendorDir . '/phpdocumentor/fileset/src', $vendorDir . '/phpdocumentor/fileset/tests/unit', $vendorDir . '/phpdocumentor/graphviz/src', $vendorDir . '/phpdocumentor/graphviz/tests/unit', $vendorDir . '/phpdocumentor/phpdocumentor/src', $vendorDir . '/phpdocumentor/phpdocumentor/tests/unit'),
+    'phpDocumentor' => array($vendorDir . '/phpdocumentor/reflection-docblock/src', $vendorDir . '/phpdocumentor/reflection/src', $vendorDir . '/phpdocumentor/reflection/tests/unit', $vendorDir . '/phpdocumentor/reflection/tests/mocks', $vendorDir . '/phpdocumentor/graphviz/src', $vendorDir . '/phpdocumentor/graphviz/tests/unit', $vendorDir . '/phpdocumentor/fileset/src', $vendorDir . '/phpdocumentor/fileset/tests/unit', $vendorDir . '/phpdocumentor/phpdocumentor/src', $vendorDir . '/phpdocumentor/phpdocumentor/tests/unit'),
     'Twig_' => array($vendorDir . '/twig/twig/lib'),
     'Thrift' => array($vendorDir . '/apache/thrift/lib/php/lib'),
     'Psr\\Log\\' => array($vendorDir . '/psr/log'),
@@ -17,7 +17,6 @@ return array(
     'PHPParser' => array($vendorDir . '/nikic/php-parser/lib'),
     'Metadata\\' => array($vendorDir . '/jms/metadata/src'),
     'KevinGH\\Version' => array($vendorDir . '/kherge/version/src/lib'),
-    'JsonSchema' => array($vendorDir . '/justinrainbow/json-schema/src'),
     'JMS\\Serializer' => array($vendorDir . '/jms/serializer/src'),
     'JMS\\' => array($vendorDir . '/jms/parser-lib/src'),
     'Herrera\\Phar\\Update' => array($vendorDir . '/herrera-io/phar-update/src/lib'),

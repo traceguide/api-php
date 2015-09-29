@@ -9,7 +9,7 @@ class TraceguideTest extends PHPUnit_Framework_TestCase {
 
     public function testGetInstance() {
         $inst = Traceguide::getInstance("test_group", "1234567890");
-        $this->assertInstanceOf("\Traceguide\Client\ClientRuntime", $inst);
+        $this->assertInstanceOf("\TraceguideBase\Client\ClientRuntime", $inst);
 
         // Is it really a singleton?
         $inst2 = Traceguide::getInstance("test_group", "1234567890");

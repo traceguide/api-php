@@ -9,4 +9,5 @@ return array(
     $vendorDir . '/herrera-io/json/src/lib/json_version.php',
     $vendorDir . '/herrera-io/phar-update/src/lib/constants.php',
     $vendorDir . '/ruafozy/mersenne-twister/src/mersenne_twister.php',
+    $baseDir . '/lib/Traceguide.php',
 );

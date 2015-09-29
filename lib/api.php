@@ -1,6 +1,6 @@
 <?php
 
-namespace Traceguide;
+namespace TraceguideBase;
 
 /**
  *@internal
@@ -23,13 +23,16 @@ interface Runtime {
      * about this operation, such as which user it is being done on behalf
      * of and log records with arbitrary payload data.
      *
-     * @returns ActiveSpan
+     * @return ActiveSpan
      */
     public function startSpan();
 
     /**
      * Creates a printf-style log statement that will be associated with
      * this particular operation instance.
+     * 
+     * All arguments after the format string will automatically be captured
+     * as part of the log payload.
      *
      * @param string $fmt a format string as accepted by sprintf
      */  
@@ -38,6 +41,9 @@ interface Runtime {
     /**
      * Creates a printf-style warning log statement that will be associated with
      * this particular operation instance.
+     * 
+     * All arguments after the format string will automatically be captured
+     * as part of the log payload.     
      *
      * @param string $fmt a format string as accepted by sprintf
      */       
@@ -46,6 +52,9 @@ interface Runtime {
     /**
      * Creates a printf-style error log statement that will be associated with
      * this particular operation instance.
+     * 
+     * All arguments after the format string will automatically be captured
+     * as part of the log payload.     
      *
      * @param string $fmt a format string as accepted by sprintf
      */       
@@ -54,6 +63,12 @@ interface Runtime {
     /**
      * Creates a printf-style fatal log statement that will be associated with
      * this particular operation instance.
+     * 
+     * All arguments after the format string will automatically be captured
+     * as part of the log payload.
+     *
+     * Note: a fatal log will exit the PHP process after the log record is
+     * created.
      *
      * @param string $fmt a format string as accepted by sprintf
      */   
@@ -61,8 +76,8 @@ interface Runtime {
 
     /**
      * Manually causes any buffered log and span records to be flushed to the
-     * server.  Normally the logs and spans are sent incrementally over time
-     * and at process exit.
+     * server. In most cases, explicit calls to flush() are not required as the 
+     * logs and spans are sent incrementally over time and at process exit.
      */
     public function flush();
 

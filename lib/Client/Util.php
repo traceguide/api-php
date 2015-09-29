@@ -1,14 +1,14 @@
 <?php
-namespace Traceguide\Client;
+namespace TraceguideBase\Client;
 
-use mersenne_twister\twister;
+use \mersenne_twister\twister;
 
 class Util {
 
     protected $_rng = null;
 
     public function __construct() {
-        $this->_rng = new twister(time());
+        $this->_rng = new \mersenne_twister\twister(time());
     }
 
     /**

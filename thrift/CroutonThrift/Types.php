@@ -115,6 +115,104 @@ class KeyValue {
 
 }
 
+class NamedCounter {
+  static $_TSPEC;
+
+  /**
+   * @var string
+   */
+  public $Name = null;
+  /**
+   * @var int
+   */
+  public $Value = null;
+
+  public function __construct($vals=null) {
+    if (!isset(self::$_TSPEC)) {
+      self::$_TSPEC = array(
+        1 => array(
+          'var' => 'Name',
+          'type' => TType::STRING,
+          ),
+        2 => array(
+          'var' => 'Value',
+          'type' => TType::I64,
+          ),
+        );
+    }
+    if (is_array($vals)) {
+      if (isset($vals['Name'])) {
+        $this->Name = $vals['Name'];
+      }
+      if (isset($vals['Value'])) {
+        $this->Value = $vals['Value'];
+      }
+    }
+  }
+
+  public function getName() {
+    return 'NamedCounter';
+  }
+
+  public function read($input)
+  {
+    $xfer = 0;
+    $fname = null;
+    $ftype = 0;
+    $fid = 0;
+    $xfer += $input->readStructBegin($fname);
+    while (true)
+    {
+      $xfer += $input->readFieldBegin($fname, $ftype, $fid);
+      if ($ftype == TType::STOP) {
+        break;
+      }
+      switch ($fid)
+      {
+        case 1:
+          if ($ftype == TType::STRING) {
+            $xfer += $input->readString($this->Name);
+          } else {
+            $xfer += $input->skip($ftype);
+          }
+          break;
+        case 2:
+          if ($ftype == TType::I64) {
+            $xfer += $input->readI64($this->Value);
+          } else {
+            $xfer += $input->skip($ftype);
+          }
+          break;
+        default:
+          $xfer += $input->skip($ftype);
+          break;
+      }
+      $xfer += $input->readFieldEnd();
+    }
+    $xfer += $input->readStructEnd();
+    return $xfer;
+  }
+
+  public function write($output) {
+    $xfer = 0;
+    $xfer += $output->writeStructBegin('NamedCounter');
+    if ($this->Name !== null) {
+      $xfer += $output->writeFieldBegin('Name', TType::STRING, 1);
+      $xfer += $output->writeString($this->Name);
+      $xfer += $output->writeFieldEnd();
+    }
+    if ($this->Value !== null) {
+      $xfer += $output->writeFieldBegin('Value', TType::I64, 2);
+      $xfer += $output->writeI64($this->Value);
+      $xfer += $output->writeFieldEnd();
+    }
+    $xfer += $output->writeFieldStop();
+    $xfer += $output->writeStructEnd();
+    return $xfer;
+  }
+
+}
+
 class Runtime {
   static $_TSPEC;
 
@@ -1345,9 +1443,17 @@ class ReportRequest {
    */
   public $timestamp_offset_micros = null;
   /**
-   * @var \CroutonThrift\SampleCount[]
+   * @var int
    */
-  public $discarded_log_record_samples = null;
+  public $oldest_micros = null;
+  /**
+   * @var int
+   */
+  public $youngest_micros = null;
+  /**
+   * @var \CroutonThrift\NamedCounter[]
+   */
+  public $counters = null;
 
   public function __construct($vals=null) {
     if (!isset(self::$_TSPEC)) {
@@ -1379,13 +1485,21 @@ class ReportRequest {
           'var' => 'timestamp_offset_micros',
           'type' => TType::I64,
           ),
-        6 => array(
-          'var' => 'discarded_log_record_samples',
+        7 => array(
+          'var' => 'oldest_micros',
+          'type' => TType::I64,
+          ),
+        8 => array(
+          'var' => 'youngest_micros',
+          'type' => TType::I64,
+          ),
+        9 => array(
+          'var' => 'counters',
           'type' => TType::LST,
           'etype' => TType::STRUCT,
           'elem' => array(
             'type' => TType::STRUCT,
-            'class' => '\CroutonThrift\SampleCount',
+            'class' => '\CroutonThrift\NamedCounter',
             ),
           ),
         );
@@ -1403,8 +1517,14 @@ class ReportRequest {
       if (isset($vals['timestamp_offset_micros'])) {
         $this->timestamp_offset_micros = $vals['timestamp_offset_micros'];
       }
-      if (isset($vals['discarded_log_record_samples'])) {
-        $this->discarded_log_record_samples = $vals['discarded_log_record_samples'];
+      if (isset($vals['oldest_micros'])) {
+        $this->oldest_micros = $vals['oldest_micros'];
+      }
+      if (isset($vals['youngest_micros'])) {
+        $this->youngest_micros = $vals['youngest_micros'];
+      }
+      if (isset($vals['counters'])) {
+        $this->counters = $vals['counters'];
       }
     }
   }
@@ -1479,18 +1599,32 @@ class ReportRequest {
             $xfer += $input->skip($ftype);
           }
           break;
-        case 6:
+        case 7:
+          if ($ftype == TType::I64) {
+            $xfer += $input->readI64($this->oldest_micros);
+          } else {
+            $xfer += $input->skip($ftype);
+          }
+          break;
+        case 8:
+          if ($ftype == TType::I64) {
+            $xfer += $input->readI64($this->youngest_micros);
+          } else {
+            $xfer += $input->skip($ftype);
+          }
+          break;
+        case 9:
           if ($ftype == TType::LST) {
-            $this->discarded_log_record_samples = array();
+            $this->counters = array();
             $_size40 = 0;
             $_etype43 = 0;
             $xfer += $input->readListBegin($_etype43, $_size40);
             for ($_i44 = 0; $_i44 < $_size40; ++$_i44)
             {
               $elem45 = null;
-              $elem45 = new \CroutonThrift\SampleCount();
+              $elem45 = new \CroutonThrift\NamedCounter();
               $xfer += $elem45->read($input);
-              $this->discarded_log_record_samples []= $elem45;
+              $this->counters []= $elem45;
             }
             $xfer += $input->readListEnd();
           } else {
@@ -1557,15 +1691,25 @@ class ReportRequest {
       $xfer += $output->writeI64($this->timestamp_offset_micros);
       $xfer += $output->writeFieldEnd();
     }
-    if ($this->discarded_log_record_samples !== null) {
-      if (!is_array($this->discarded_log_record_samples)) {
+    if ($this->oldest_micros !== null) {
+      $xfer += $output->writeFieldBegin('oldest_micros', TType::I64, 7);
+      $xfer += $output->writeI64($this->oldest_micros);
+      $xfer += $output->writeFieldEnd();
+    }
+    if ($this->youngest_micros !== null) {
+      $xfer += $output->writeFieldBegin('youngest_micros', TType::I64, 8);
+      $xfer += $output->writeI64($this->youngest_micros);
+      $xfer += $output->writeFieldEnd();
+    }
+    if ($this->counters !== null) {
+      if (!is_array($this->counters)) {
         throw new TProtocolException('Bad type in structure.', TProtocolException::INVALID_DATA);
       }
-      $xfer += $output->writeFieldBegin('discarded_log_record_samples', TType::LST, 6);
+      $xfer += $output->writeFieldBegin('counters', TType::LST, 9);
       {
-        $output->writeListBegin(TType::STRUCT, count($this->discarded_log_record_samples));
+        $output->writeListBegin(TType::STRUCT, count($this->counters));
         {
-          foreach ($this->discarded_log_record_samples as $iter48)
+          foreach ($this->counters as $iter48)
           {
             $xfer += $iter48->write($output);
           }

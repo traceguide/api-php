@@ -1,5 +1,7 @@
 <?php
 
+use TraceguideBase\ActiveSpan;
+
 require_once(__DIR__ . '/client/ClientRuntime.php');
 
 class Traceguide {
@@ -12,15 +14,36 @@ class Traceguide {
     /**
      * Initializes and returns the singleton instance of the Runtime.
      *
+     * For convenience, multiple calls to initialize are allowed. For example,
+     * in library code with more than possible first entry-point, this may
+     * be helpful.
+     *
+     * @return \TraceguideBase\Runtime
      * @throws Exception if the group name or access token is not a valid string
      * @throws Exception if the runtime singleton has already been initialized
      */
     public static function initialize($group_name, $access_token, $opts = null) {
-        if (isset(self::$_singleton)) {
-            throw new Exception('Instrumentation library already initialized');
+        
+        if (!is_string($group_name) || strlen($group_name) == 0) {
+            throw new Exception("Invalid group_name");
         }
+        if (!is_string($access_token) || strlen($access_token) == 0) {
+            throw new Exception("Invalid access_token");
+        }     
 
-        self::$_singleton = self::newRuntime($group_name, $access_token, $opts);
+        // If the singleton has already been created, treat the initialization
+        // as an options() call instead.
+        if (isset(self::$_singleton)) {
+            if (!isset($opts)) {
+                $opts = array();
+            }
+            self::$_singleton->options(array_merge($opts, array(
+                'group_name' => $group_name,
+                'access_token' => $access_token,
+            )));
+        } else {
+            self::$_singleton = self::newRuntime($group_name, $access_token, $opts);
+        }
         return self::$_singleton;
     }
 
@@ -33,7 +56,7 @@ class Traceguide {
      * 
      * @param $group_name Group name to use for the runtime
      * @param $access_token The project access token
-     * @return Runtime
+     * @return \TraceguideBase\Runtime
      * @throws Exception if the group name or access token is not a valid string
      */
     public static function getInstance($group_name = NULL, $access_token = NULL, $opts = NULL) {
@@ -43,36 +66,39 @@ class Traceguide {
         return self::$_singleton;
     }
 
+
     /**
      * Creates a new runtime instance.
      *
      * @param $group_name Group name to use for the runtime
      * @param $access_token The project access token     
-     * @return Runtime
+     * @return \TraceguideBase\Runtime
      * @throws Exception if the group name or access token is not a valid string.
      */
     public static function newRuntime ($group_name, $access_token, $opts = NULL) {
         if (is_null($opts)) {
             $opts = array();
         }
-        $opts['group_name'] = $group_name;
-        $opts['access_token'] = $access_token;
 
-        if (!is_string($opts['group_name']) || strlen($opts['group_name']) == 0) {
-            throw new Exception("Invalid group_name");
+        // It is valid to create and use the runtime before it is fully configured.
+        // The only constraint is that it will not be able to flush data until the
+        // configuration is complete.
+        if ($group_name != NULL) {
+            $opts['group_name'] = $group_name;
         }
-        if (!is_string($opts['access_token']) || strlen($opts['access_token']) == 0) {
-            throw new Exception("Invalid access_token");
-        }        
-
-        return new Traceguide\Client\ClientRuntime($opts);
+        if ($group_name != NULL) {
+           $opts['access_token'] = $access_token;   
+        }
+        return new TraceguideBase\Client\ClientRuntime($opts);
     }
 
     /*
      * Runtime API
      */
 
-
+    /**
+     * @return \TraceguideBase\ActiveSpan
+     */
     public static function startSpan() {
         return self::getInstance()->startSpan();
     }

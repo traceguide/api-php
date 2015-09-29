@@ -1,10 +1,10 @@
 <?php
-namespace Traceguide\Client;
+namespace TraceguideBase\Client;
 
 require_once(dirname(__FILE__) . "/Util.php");
 require_once(dirname(__FILE__) . "/../../thrift/CroutonThrift/Types.php");
 
-class NoOpSpan implements \Traceguide\ActiveSpan {
+class NoOpSpan implements \TraceguideBase\ActiveSpan {
     public function guid() { return ""; }
 
     public function setOperation($name) {}

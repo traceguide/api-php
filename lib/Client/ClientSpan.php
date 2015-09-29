@@ -1,10 +1,10 @@
 <?php
-namespace Traceguide\Client;
+namespace TraceguideBase\Client;
 
 require_once(dirname(__FILE__) . "/Util.php");
 require_once(dirname(__FILE__) . "/../../thrift/CroutonThrift/Types.php");
 
-class ClientSpan implements \Traceguide\ActiveSpan {
+class ClientSpan implements \TraceguideBase\ActiveSpan {
     
     protected $_runtime = null;
 

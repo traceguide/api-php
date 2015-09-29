@@ -1,5 +1,5 @@
 <?php
-namespace Traceguide\Client;
+namespace TraceguideBase\Client;
 
 require_once(dirname(__FILE__) . "/../api.php");
 require_once(dirname(__FILE__) . "/ClientSpan.php");
@@ -11,13 +11,14 @@ require_once(dirname(__FILE__) . "/../../thrift/CroutonThrift/ReportingService.p
 /**
  * Main implementation of the Runtime interface
  */
-class ClientRuntime implements \Traceguide\Runtime {
+class ClientRuntime implements \TraceguideBase\Runtime {
 
     protected $_util = null;
     protected $_options = array();
     protected $_enabled = true;
 
     protected $_guid = "";
+    protected $_startTime = 0;
     protected $_thriftAuth = null;
     protected $_thriftRuntime = null;
     protected $_thriftClient = null;
@@ -50,14 +51,9 @@ class ClientRuntime implements \Traceguide\Runtime {
         $this->_nextFlushMicros = $this->_util->nowMicros() + $this->_flushPeriodMicros;
 
         $this->_guid = $this->_generateUUIDString();
-        $this->_thriftAuth = new \CroutonThrift\Auth(array(
-            'access_token' => $this->_options["access_token"],
-        ));
-        $this->_thriftRuntime = new \CroutonThrift\Runtime(array(
-            'guid' => $this->_guid,
-            'start_micros' => $this->_util->nowMicros(),
-            'group_name' => $this->_options["group_name"],
-        ));
+        $this->_startTime = $this->_util->nowMicros();
+
+        $this->options($options);
 
         // PHP is (in many real-world contexts) single-threaded and
         // does not have an event loop like Node.js.  Flush on exit.
@@ -65,6 +61,50 @@ class ClientRuntime implements \Traceguide\Runtime {
         register_shutdown_function(function() use ($runtime) {
             $runtime->flush();
         });
+    }
+
+    public function __destruct() {
+        $this->flush();
+    }
+
+    public function options($options) {
+
+        // Deferred group name / access token initialization is supported (i.e.
+        // it is possible to create logs/spans before setting this info).
+        if (isset($options['access_token']) && isset($options['group_name'])) {
+            $this->_initThriftIfNeeded($options['group_name'], $options['access_token']);
+        }
+    }
+
+    private function _initThriftIfNeeded($groupName, $accessToken) {
+
+        if (!is_string($accessToken)) {
+            throw new \Exception('access_token must be a string');
+        }
+        if (!is_string($groupName)) {
+            throw new \Exception('group_name must be a string');
+        }
+
+        // Potentially redundant initialization info: only complain if
+        // it is inconsistent.
+        if ($this->_thriftAuth != NULL || $this->_thriftRuntime != NULL) {
+            if ($this->_thriftAuth->access_token !== $accessToken) {
+                throw new \Exception('access_token cannot be changed after it is set');
+            }
+            if ($this->_thriftRuntime->group_name !== $groupName) {
+                throw new \Exception('group_name cannot be changed after it is set');
+            }
+            return;
+        }
+
+        $this->_thriftAuth = new \CroutonThrift\Auth(array(
+            'access_token' => $accessToken,
+        ));
+        $this->_thriftRuntime = new \CroutonThrift\Runtime(array(
+            'guid' => $this->_guid,
+            'start_micros' => $this->_startTime,
+            'group_name' => $groupName,
+        ));
     }
 
     public function guid() {
@@ -128,6 +168,10 @@ class ClientRuntime implements \Traceguide\Runtime {
     // PHP does not have an event loop or timer threads. Instead manually check as
     // new data comes in by calling this method.
     protected function flushIfNeeded() {
+        if (!$this->_enabled) {
+            return;
+        }
+
         $now = $this->_util->nowMicros();
         if ($now >= $this->_nextFlushMicros) {
             $this->flush();
@@ -140,6 +184,12 @@ class ClientRuntime implements \Traceguide\Runtime {
         }
 
         $this->_nextFlushMicros = $this->_util->nowMicros() + $this->_flushPeriodMicros;
+
+        // The thrift configuration has not yet been set: allow logs and spans
+        // to be buffered in this case, but flushes won't yet be possible.
+        if ($this->_thriftRuntime == NULL) {
+            return;
+        }
 
         if (count($this->_logRecords) == 0 && count($this->_spanRecords) == 0) {
             return;
