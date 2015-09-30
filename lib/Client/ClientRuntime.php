@@ -23,8 +23,14 @@ class ClientRuntime implements \TraceguideBase\Runtime {
     protected $_thriftRuntime = null;
     protected $_thriftClient = null;
 
+    protected $_reportStartTime = 0;
     protected $_logRecords = array();
     protected $_spanRecords = array();
+    protected $_counters = array(
+        'dropped_logs' => 0,
+        'dropped_counters' => 0,
+    );
+
     protected $_nextFlushMicros = 0;
     protected $_flushPeriodMicros = 0;
 
@@ -52,6 +58,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
 
         $this->_guid = $this->_generateUUIDString();
         $this->_startTime = $this->_util->nowMicros();
+        $this->_reportStartTime = $this->_startTime;
 
         $this->options($options);
 
@@ -183,7 +190,8 @@ class ClientRuntime implements \TraceguideBase\Runtime {
             return;
         }
 
-        $this->_nextFlushMicros = $this->_util->nowMicros() + $this->_flushPeriodMicros;
+        $now = $this->_util->nowMicros();
+        $this->_nextFlushMicros = $now + $this->_flushPeriodMicros;
 
         // The thrift configuration has not yet been set: allow logs and spans
         // to be buffered in this case, but flushes won't yet be possible.
@@ -196,19 +204,35 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         }
         $this->ensureConnection();
 
+        // Convert the counters to thrift form
+        $thriftCounters = array();
+        foreach ($this->_counters as $key => $value) {
+            array_push($thriftCounters, new \CroutonThrift\NamedCounter(array(
+                'Name' => $key,
+                'Value' => $value,
+            )));
+        }
         $reportRequest = new \CroutonThrift\ReportRequest(array(
-            'runtime' => $this->_thriftRuntime,
-            'log_records' => $this->_logRecords,
-            'span_records' => $this->_spanRecords,
+            'runtime'         => $this->_thriftRuntime,
+            'oldest_micros'   => $this->_reportStartTime,
+            'youngest_micros' => $now,
+            'log_records'     => $this->_logRecords,
+            'span_records'    => $this->_spanRecords,
+            'counters'        => $thriftCounters,
         ));
 
         $resp = null;
         try {
             $resp = $this->_thriftClient->Report($this->_thriftAuth, $reportRequest);
 
-            // Only clear the buffers if the Report() did not throw an exception
+            // Only clear the buffers and reset the data if the Report() did not throw 
+            // an exception
+            $this->_reportStartTime = $now;
             $this->_logRecords = array();
             $this->_spanRecords = array();
+            foreach ($this->_counters as &$value) {
+                $value = 0;
+            }
 
         } catch (\Thrift\Exception\TTransportException $e) {
             // Release the client and so it will reconnect on the next attempt
@@ -249,7 +273,11 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         }
 
         $span->setEndMicros($this->_util->nowMicros());
-        $this->pushWithMax($this->_spanRecords, $span->toThrift(), $this->_options["max_span_records"]);
+        $full = $this->pushWithMax($this->_spanRecords, $span->toThrift(), $this->_options["max_span_records"]);
+        if ($full) {
+            $this->_counters['dropped_spans']++;
+        }
+
         $this->flushIfNeeded();
     }
 
@@ -300,7 +328,10 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         }
 
         $rec = new \CroutonThrift\LogRecord($fields);
-        $this->pushWithMax($this->_logRecords, $rec, $this->_options["max_log_records"]);
+        $full = $this->pushWithMax($this->_logRecords, $rec, $this->_options["max_log_records"]);
+        if ($full) {
+            $this->_counters['dropped_logs']++;
+        }
     }
 
     protected function ensureConnection() {
@@ -330,6 +361,9 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         if ($count > $max) {
             $i = $this->_util->randIntRange(0, $max - 1);
             $arr[$i] = array_pop($arr);
+            return true;
+        } else {
+            return false;
         }
     }
 }
