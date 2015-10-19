@@ -2,7 +2,7 @@
 
 use TraceguideBase\ActiveSpan;
 
-require_once(__DIR__ . '/client/ClientRuntime.php');
+require_once(__DIR__ . '/Client/ClientRuntime.php');
 
 class Traceguide {
 
@@ -23,13 +23,13 @@ class Traceguide {
      * @throws Exception if the runtime singleton has already been initialized
      */
     public static function initialize($group_name, $access_token, $opts = null) {
-        
+
         if (!is_string($group_name) || strlen($group_name) == 0) {
             throw new Exception("Invalid group_name");
         }
         if (!is_string($access_token) || strlen($access_token) == 0) {
             throw new Exception("Invalid access_token");
-        }     
+        }
 
         // If the singleton has already been created, treat the initialization
         // as an options() call instead.
@@ -50,10 +50,10 @@ class Traceguide {
     /**
      * Returns the singleton instance of the Runtime.
      *
-     * For convenience, this function can be passed the  $group_name and 
+     * For convenience, this function can be passed the  $group_name and
      * $access_token parameters to also initialize the runtime singleton. These
-     * values will be ignored on any calls after the first to getInstance(). 
-     * 
+     * values will be ignored on any calls after the first to getInstance().
+     *
      * @param $group_name Group name to use for the runtime
      * @param $access_token The project access token
      * @return \TraceguideBase\Runtime
@@ -71,7 +71,7 @@ class Traceguide {
      * Creates a new runtime instance.
      *
      * @param $group_name Group name to use for the runtime
-     * @param $access_token The project access token     
+     * @param $access_token The project access token
      * @return \TraceguideBase\Runtime
      * @throws Exception if the group name or access token is not a valid string.
      */
@@ -87,7 +87,7 @@ class Traceguide {
             $opts['group_name'] = $group_name;
         }
         if ($group_name != NULL) {
-           $opts['access_token'] = $access_token;   
+           $opts['access_token'] = $access_token;
         }
         return new TraceguideBase\Client\ClientRuntime($opts);
     }
