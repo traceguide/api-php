@@ -2,7 +2,7 @@
 
 use TraceguideBase\ActiveSpan;
 
-require_once(__DIR__ . '/client/ClientRuntime.php');
+require_once(__DIR__ . '/Client/ClientRuntime.php');
 
 class Traceguide {
 

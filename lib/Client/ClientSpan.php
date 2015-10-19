@@ -5,7 +5,7 @@ require_once(dirname(__FILE__) . "/Util.php");
 require_once(dirname(__FILE__) . "/../../thrift/CroutonThrift/Types.php");
 
 class ClientSpan implements \TraceguideBase\ActiveSpan {
-    
+
     protected $_runtime = null;
 
     protected $_guid = "";
@@ -14,6 +14,7 @@ class ClientSpan implements \TraceguideBase\ActiveSpan {
     protected $_attributes = array();
     protected $_startMicros = 0;
     protected $_endMicros = 0;
+    protected $_errorFlag = false;
 
     public function __construct($runtime) {
         $this->_runtime = $runtime;
@@ -51,9 +52,9 @@ class ClientSpan implements \TraceguideBase\ActiveSpan {
         return $this;
     }
 
-    // TODO: along with "addAttribute", given the implementation 
+    // TODO: along with "addAttribute", given the implementation
     public function addTraceJoinId($key, $value) {
-        $this->_joinIds[$key] = $value;   
+        $this->_joinIds[$key] = $value;
         return $this;
     }
 
@@ -75,26 +76,28 @@ class ClientSpan implements \TraceguideBase\ActiveSpan {
     }
 
     public function infof($fmt) {
-        $this->_log('I', $fmt, func_get_args());
+        $this->_log('I', false, $fmt, func_get_args());
         return $this;
     }
 
     public function warnf($fmt) {
-        $this->_log('W', $fmt, func_get_args());
+        $this->_log('W', false, $fmt, func_get_args());
         return $this;
     }
 
     public function errorf($fmt) {
-        $this->_log('E', $fmt, func_get_args());
+        $this->_errorFlag = true;
+        $this->_log('E', true, $fmt, func_get_args());
         return $this;
     }
 
     public function fatalf($fmt) {
-        $text = $this->_log('F', $fmt, func_get_args());
+        $this->_errorFlag = true;
+        $text = $this->_log('F', true, $fmt, func_get_args());
         die($text);
     }
 
-    protected function _log($level, $fmt, $allArgs) {
+    protected function _log($level, $errorFlag, $fmt, $allArgs) {
         // The $allArgs variable contains the $fmt string
         array_shift($allArgs);
         $text = vsprintf($fmt, $allArgs);
@@ -102,14 +105,13 @@ class ClientSpan implements \TraceguideBase\ActiveSpan {
         $this->_runtime->_rawLogRecord(array(
             'span_guid' => $this->_guid,
             'level' => $level,
+            'error_flag' => $errorFlag,
             'message' => $text,
-            // TODO: capture args as payload
         ), $allArgs);
         return $text;
     }
 
     public function toThrift() {
-
         $joinIds = array();
         foreach ($this->_joinIds as $key => $value) {
             $pair = new \CroutonThrift\TraceJoinId(array(
@@ -126,8 +128,8 @@ class ClientSpan implements \TraceguideBase\ActiveSpan {
             "oldest_micros" => $this->_startMicros,
             "youngest_micros" => $this->_endMicros,
             "join_ids" => $joinIds,
+            "error_flag" => $this->_errorFlag,
         ));
         return $rec;
     }
 }
-

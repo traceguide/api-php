@@ -49,7 +49,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
             //
             // TODO: right now any payload with depth greater than this is simply
             // rejected; it is not trimmed.
-            'max_payload_depth'     => 10, 
+            'max_payload_depth'     => 10,
 
         ), $options);
 
@@ -153,24 +153,24 @@ class ClientRuntime implements \TraceguideBase\Runtime {
     public function warnf($fmt) {
         if (!$this->_enabled) {
             return;
-        }        
+        }
         $this->_log('W', $fmt, func_get_args());
     }
 
     public function errorf($fmt) {
         if (!$this->_enabled) {
             return;
-        }        
+        }
         $this->_log('E', $fmt, func_get_args());
     }
 
     public function fatalf($fmt) {
         if (!$this->_enabled) {
             return;
-        }        
+        }
         $text = $this->_log('F', $fmt, func_get_args());
         die($text);
-    }  
+    }
 
     // PHP does not have an event loop or timer threads. Instead manually check as
     // new data comes in by calling this method.
@@ -225,7 +225,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         try {
             $resp = $this->_thriftClient->Report($this->_thriftAuth, $reportRequest);
 
-            // Only clear the buffers and reset the data if the Report() did not throw 
+            // Only clear the buffers and reset the data if the Report() did not throw
             // an exception
             $this->_reportStartTime = $now;
             $this->_logRecords = array();
@@ -297,7 +297,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
 
         $this->flushIfNeeded();
         return $text;
-    }  
+    }
 
     /**
      * Internal use only.
@@ -344,7 +344,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
     protected function createConnection() {
         $host = $this->_options['service_host'];
         $port = $this->_options['service_port'];
-        
+
         $socket = new \Thrift\Transport\THttpClient($host, $port, '/_rpc/v1/crouton/binary');
         $transport = new \Thrift\Transport\TBufferedTransport($socket, 1024, 1024);
         $protocol = new \Thrift\Protocol\TBinaryProtocol($transport);
@@ -367,4 +367,3 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         }
     }
 }
-
