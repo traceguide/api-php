@@ -869,9 +869,9 @@ class SpanRecord {
    */
   public $attributes = null;
   /**
-   * @var string
+   * @var bool
    */
-  public $deprecated_error_text = null;
+  public $error_flag = null;
 
   public function __construct($vals=null) {
     if (!isset(self::$_TSPEC)) {
@@ -914,9 +914,9 @@ class SpanRecord {
             'class' => '\CroutonThrift\KeyValue',
             ),
           ),
-        7 => array(
-          'var' => 'deprecated_error_text',
-          'type' => TType::STRING,
+        9 => array(
+          'var' => 'error_flag',
+          'type' => TType::BOOL,
           ),
         );
     }
@@ -942,8 +942,8 @@ class SpanRecord {
       if (isset($vals['attributes'])) {
         $this->attributes = $vals['attributes'];
       }
-      if (isset($vals['deprecated_error_text'])) {
-        $this->deprecated_error_text = $vals['deprecated_error_text'];
+      if (isset($vals['error_flag'])) {
+        $this->error_flag = $vals['error_flag'];
       }
     }
   }
@@ -1038,9 +1038,9 @@ class SpanRecord {
             $xfer += $input->skip($ftype);
           }
           break;
-        case 7:
-          if ($ftype == TType::STRING) {
-            $xfer += $input->readString($this->deprecated_error_text);
+        case 9:
+          if ($ftype == TType::BOOL) {
+            $xfer += $input->readBool($this->error_flag);
           } else {
             $xfer += $input->skip($ftype);
           }
@@ -1100,11 +1100,6 @@ class SpanRecord {
       $xfer += $output->writeI64($this->youngest_micros);
       $xfer += $output->writeFieldEnd();
     }
-    if ($this->deprecated_error_text !== null) {
-      $xfer += $output->writeFieldBegin('deprecated_error_text', TType::STRING, 7);
-      $xfer += $output->writeString($this->deprecated_error_text);
-      $xfer += $output->writeFieldEnd();
-    }
     if ($this->attributes !== null) {
       if (!is_array($this->attributes)) {
         throw new TProtocolException('Bad type in structure.', TProtocolException::INVALID_DATA);
@@ -1120,6 +1115,11 @@ class SpanRecord {
         }
         $output->writeListEnd();
       }
+      $xfer += $output->writeFieldEnd();
+    }
+    if ($this->error_flag !== null) {
+      $xfer += $output->writeFieldBegin('error_flag', TType::BOOL, 9);
+      $xfer += $output->writeBool($this->error_flag);
       $xfer += $output->writeFieldEnd();
     }
     $xfer += $output->writeFieldStop();
