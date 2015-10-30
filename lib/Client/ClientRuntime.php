@@ -5,6 +5,7 @@ require_once(dirname(__FILE__) . "/../api.php");
 require_once(dirname(__FILE__) . "/ClientSpan.php");
 require_once(dirname(__FILE__) . "/NoOpSpan.php");
 require_once(dirname(__FILE__) . "/Util.php");
+require_once(dirname(__FILE__) . "/THttpClientAsync.php");
 require_once(dirname(__FILE__) . "/../../thrift/CroutonThrift/Types.php");
 require_once(dirname(__FILE__) . "/../../thrift/CroutonThrift/ReportingService.php");
 
@@ -40,6 +41,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         $this->_options = array_merge(array(
             'service_host'          => 'api.traceguide.io',
             'service_port'          => 9998,
+            'secure'                => false,
 
             'max_log_records'       => 1000,
             'max_span_records'      => 1000,
@@ -53,10 +55,17 @@ class ClientRuntime implements \TraceguideBase\Runtime {
 
         ), $options);
 
+        // If port was not set, and secure was, choose the port appropriately
+        if (!isset($options['service_port'])) {
+            $this->_options['service_port'] = ($this->_options['secure'] ? 9997 : 9998);
+        }
+
         $this->_flushPeriodMicros = $this->_options["reporting_period_secs"] * 1e6;
         $this->_nextFlushMicros = $this->_util->nowMicros() + $this->_flushPeriodMicros;
 
-        $this->_guid = $this->_generateUUIDString();
+        // Note: the GUID is not generated until the library is initialized
+        // as it depends on the access token
+        $this->_guid = 0;
         $this->_startTime = $this->_util->nowMicros();
         $this->_reportStartTime = $this->_startTime;
 
@@ -103,6 +112,10 @@ class ClientRuntime implements \TraceguideBase\Runtime {
             }
             return;
         }
+
+        // Generate the GUID on thrift initialization as the GUID should be
+        // stable for a particular access token / group name combo.
+        $this->_guid = $this->_generateStableUUID($accessToken, $groupName);
 
         $this->_thriftAuth = new \CroutonThrift\Auth(array(
             'access_token' => $accessToken,
@@ -224,19 +237,19 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         $resp = null;
         try {
             $resp = $this->_thriftClient->Report($this->_thriftAuth, $reportRequest);
-
-            // Only clear the buffers and reset the data if the Report() did not throw
-            // an exception
-            $this->_reportStartTime = $now;
-            $this->_logRecords = array();
-            $this->_spanRecords = array();
-            foreach ($this->_counters as &$value) {
-                $value = 0;
-            }
-
         } catch (\Thrift\Exception\TTransportException $e) {
-            // Release the client and so it will reconnect on the next attempt
-            $this->_client = null;
+            // Ignore errors since the TTransport does not support readback
+        } catch (\Exception $e) {
+            // Ignore errors since the TTransport does not support readback
+        }
+
+        // ALWAYS reset the buffers and update the counters as the RPC response
+        // is, by design, not waited for and not reliable.
+        $this->_reportStartTime = $now;
+        $this->_logRecords = array();
+        $this->_spanRecords = array();
+        foreach ($this->_counters as &$value) {
+            $value = 0;
         }
 
         // Process server response commands
@@ -253,7 +266,27 @@ class ClientRuntime implements \TraceguideBase\Runtime {
     /**
      * Internal use only.
      *
-     * Generates a random ID (not a *true* UUID)
+     * Generates a stable unique value for the runtime.
+     */
+    public function _generateStableUUID($token, $group) {
+        $pid = getmypid();
+
+        // It would be better to use GMP, but this adds a client dependency
+        // http://www.sitepoint.com/create-unique-64bit-integer-string/
+        // gmp_strval(gmp_init(substr(md5($str), 0, 16), 16), 10);
+        // CRC32 lacks the cryptographic strength of GMP.
+        //
+        // It'd also be good to include process start time in the mix if that
+        // can be determined reliably in a platform independent manner.
+        return sprintf("%08x%08x",
+            crc32(sprintf("%d%s", $pid, $group)),
+            crc32(sprintf("%s%d", $token, $pid)));
+    }
+
+    /**
+     * Internal use only.
+     *
+     * Generates a random ID (not a *true* UUID).
      */
     public function _generateUUIDString() {
         return sprintf("%08x%08x%08x%08x",
@@ -292,7 +325,6 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         $this->_rawLogRecord(array(
             'level' => $level,
             'message' => $text,
-            // TODO: capture args as payload
         ), $allArgs);
 
         $this->flushIfNeeded();
@@ -344,10 +376,10 @@ class ClientRuntime implements \TraceguideBase\Runtime {
     protected function createConnection() {
         $host = $this->_options['service_host'];
         $port = $this->_options['service_port'];
+        $secure = $this->_options['secure'];
 
-        $socket = new \Thrift\Transport\THttpClient($host, $port, '/_rpc/v1/crouton/binary');
-        $transport = new \Thrift\Transport\TBufferedTransport($socket, 1024, 1024);
-        $protocol = new \Thrift\Protocol\TBinaryProtocol($transport);
+        $socket = new THttpClientAsync($host, $port, '/_rpc/v1/crouton/binary', $secure);
+        $protocol = new \Thrift\Protocol\TBinaryProtocol($socket);
         $client = new \CroutonThrift\ReportingServiceClient($protocol);
 
         return $client;

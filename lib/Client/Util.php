@@ -8,11 +8,12 @@ class Util {
     protected $_rng = null;
 
     public function __construct() {
-        $this->_rng = new \mersenne_twister\twister(time());
+        $seed = floor(microtime(TRUE) * 1000.0 * 1000.0);
+        $this->_rng = new \mersenne_twister\twister($seed);
     }
 
     /**
-     * Returns an integer in the following closed range (i.e. inclusive, 
+     * Returns an integer in the following closed range (i.e. inclusive,
      * $lower <= $x <= $upper).
      */
     public function randIntRange($lower, $upper) {
@@ -32,4 +33,4 @@ class Util {
         // microsecond accuracy (not the current time in microseconds!).
         return floor(microtime(TRUE) * 1000.0 * 1000.0);
     }
-} 
+}
