@@ -90,13 +90,19 @@ class THttpClientAsync extends TTransport {
     protected $socket_;
 
     /**
+     * Enable additional logging and runtime checks.
+     * @var boolean
+     */
+    protected $debug_;
+
+    /**
      * Make a new HTTP client.
      *
      * @param string $host
      * @param int    $port
      * @param string $uri
      */
-    public function __construct($host, $port=80, $uri='', $secure = True) {
+    public function __construct($host, $port=80, $uri='', $secure = TRUE, $debug = FALSE) {
         if ((TStringFuncFactory::create()->strlen($uri) > 0) && ($uri{0} != '/')) {
           $uri = '/'.$uri;
         }
@@ -108,6 +114,11 @@ class THttpClientAsync extends TTransport {
         $this->timeout_ = null;
         $this->headers_ = array();
         $this->socket_ = null;
+        $this->debug_ = $debug;
+    }
+
+    public function __destruct() {
+        $this->_closeSocket();
     }
 
     /**
@@ -214,19 +225,40 @@ class THttpClientAsync extends TTransport {
 
         $failed = FALSE;
         $sent = 0;
+
         while (!$failed && $sent < $total) {
             try {
-                $written = fwrite($fd, $buffer, self::MAX_BYTES_PER_WRITE);
+                // Supress any error messages as it is considered part of normal
+                // operation for the write to fail on a broken pipe or timeout
+                $written = @fwrite($fd, $buffer, self::MAX_BYTES_PER_WRITE);
 
                 if ($written === FALSE) {
+
+                    if ($this->debug_) {
+                        error_log("Write failed.");
+                    }
                     $failed = TRUE;
+
                 } else if ($written > 0){
+
                     $sent += $written;
                     $buffer = substr($buffer, $written);
+
                 } else if ($written === 0) {
+                    if ($this->debug_) {
+                        error_log("Zero bytes written to socket. sent=$sent total=$total");
+                    }
                     $failed = TRUE;
                 }
+
+                if ($this->debug_) {
+                    error_log("Written = $written bytes. Sent $sent of $total.");
+                }
+
             } catch (Exception $e) {
+                if ($this->debug_) {
+                    error_log($e);
+                }
                 $failed = TRUE;
             }
         }
@@ -255,7 +287,8 @@ class THttpClientAsync extends TTransport {
 
         for ($retry = 0; $retry < self::MAX_SOCKET_OPEN_RETRIES; $retry++) {
             try {
-                $fd = pfsockopen($sockaddr, $port, $errno, $errstr, $timeout);
+                // Suppress connection error logs
+                $fd = @pfsockopen($sockaddr, $port, $errno, $errstr, $timeout);
                 if ($errno == 0 && is_resource($fd)) {
                     // Connection okay - break out of the retry loop
                     $this->socket_ = $fd;
@@ -277,7 +310,7 @@ class THttpClientAsync extends TTransport {
         $fd = $this->socket_;
         if (is_resource($fd)) {
             $this->socket_ = null;
-            fclose($fd);
+            @fclose($fd);
         }
     }
 }

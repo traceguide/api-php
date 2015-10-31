@@ -72,7 +72,16 @@ class ClientSpan implements \TraceguideBase\ActiveSpan {
     }
 
     public function setParent($span) {
-        return $this->addAttribute("parent_span_guid", $span->guid());
+        // Inherit any join IDs from the parent that have not been explicitly
+        // set on the child
+        foreach ($span->_joinIds as $key => $value) {
+            if (!array_key_exists($key, $this->_joinIds)) {
+                $this->_joinIds[$key] = $value;
+            }
+        }
+
+        $this->addAttribute("parent_span_guid", $span->guid());
+        return $this;
     }
 
     public function infof($fmt) {

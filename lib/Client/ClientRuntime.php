@@ -17,6 +17,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
     protected $_util = null;
     protected $_options = array();
     protected $_enabled = true;
+    protected $_debug = false;
 
     protected $_guid = "";
     protected $_startTime = 0;
@@ -53,12 +54,19 @@ class ClientRuntime implements \TraceguideBase\Runtime {
             // rejected; it is not trimmed.
             'max_payload_depth'     => 10,
 
+            // Internal debugging flag that enables additional logging and
+            // runtime checks. Not intended to run in production as it may add
+            // logging "noise" to the calling code.
+            'debug'                 => false,
+
         ), $options);
 
         // If port was not set, and secure was, choose the port appropriately
         if (!isset($options['service_port'])) {
             $this->_options['service_port'] = ($this->_options['secure'] ? 9997 : 9998);
         }
+
+        $this->_debug = $this->_options['debug'];
 
         $this->_flushPeriodMicros = $this->_options["reporting_period_secs"] * 1e6;
         $this->_nextFlushMicros = $this->_util->nowMicros() + $this->_flushPeriodMicros;
@@ -84,22 +92,31 @@ class ClientRuntime implements \TraceguideBase\Runtime {
     }
 
     public function options($options) {
-
         // Deferred group name / access token initialization is supported (i.e.
         // it is possible to create logs/spans before setting this info).
         if (isset($options['access_token']) && isset($options['group_name'])) {
             $this->_initThriftIfNeeded($options['group_name'], $options['access_token']);
         }
+
+        $this->_debug = $this->_options['debug'];
     }
 
     private function _initThriftIfNeeded($groupName, $accessToken) {
 
+        // Pre-conditions
         if (!is_string($accessToken)) {
             throw new \Exception('access_token must be a string');
         }
         if (!is_string($groupName)) {
             throw new \Exception('group_name must be a string');
         }
+        if (!(strlen($accessToken) > 0)) {
+            throw new \Exception('access_token must be non-zero in length');
+        }
+        if (!(strlen($groupName) > 0)) {
+            throw new \Exception('group_name must be non-zero in length');
+        }
+
 
         // Potentially redundant initialization info: only complain if
         // it is inconsistent.
@@ -239,8 +256,10 @@ class ClientRuntime implements \TraceguideBase\Runtime {
             $resp = $this->_thriftClient->Report($this->_thriftAuth, $reportRequest);
         } catch (\Thrift\Exception\TTransportException $e) {
             // Ignore errors since the TTransport does not support readback
+            $this->_debugRecordError($e);
         } catch (\Exception $e) {
             // Ignore errors since the TTransport does not support readback
+            $this->_debugRecordError($e);
         }
 
         // ALWAYS reset the buffers and update the counters as the RPC response
@@ -259,7 +278,6 @@ class ClientRuntime implements \TraceguideBase\Runtime {
                     $this->disable();
                 }
             }
-
         }
     }
 
@@ -377,8 +395,9 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         $host = $this->_options['service_host'];
         $port = $this->_options['service_port'];
         $secure = $this->_options['secure'];
+        $debug = $this->_debug;
 
-        $socket = new THttpClientAsync($host, $port, '/_rpc/v1/crouton/binary', $secure);
+        $socket = new THttpClientAsync($host, $port, '/_rpc/v1/crouton/binary', $secure, $debug);
         $protocol = new \Thrift\Protocol\TBinaryProtocol($socket);
         $client = new \CroutonThrift\ReportingServiceClient($protocol);
 
@@ -396,6 +415,12 @@ class ClientRuntime implements \TraceguideBase\Runtime {
             return true;
         } else {
             return false;
+        }
+    }
+
+    protected function _debugRecordError($e) {
+        if ($this->debug_) {
+            error_log($e);
         }
     }
 }
