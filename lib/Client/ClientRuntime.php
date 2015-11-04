@@ -424,7 +424,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
     }
 
     protected function _debugRecordError($e) {
-        if ($this->debug_) {
+        if ($this->_debug) {
             error_log($e);
         }
     }
