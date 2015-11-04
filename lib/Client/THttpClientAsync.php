@@ -20,7 +20,12 @@ class THttpClientAsync extends TTransport {
     /**
      * Timeout for opening the persistent socket.
      */
-    const DEFAULT_TIMEOUT_SECS = 1;
+    const DEFAULT_CONNECT_TIMEOUT_SECS = 0.5;
+
+    /**
+     * Stream timeout
+     */
+    const DEFAULT_STREAM_TIMEOUT_MICROS = 1e5;
 
     /**
      * On a socket open failure, number of times to retry regardless of the
@@ -189,7 +194,8 @@ class THttpClientAsync extends TTransport {
                                 'Accept' => 'application/x-thrift',
                                 'User-Agent' => 'PHP/THttpClient',
                                 'Content-Type' => 'application/x-thrift',
-                                'Content-Length' => TStringFuncFactory::create()->strlen($this->buf_));
+                                'Content-Length' => TStringFuncFactory::create()->strlen($this->buf_),
+                            );
         foreach (array_merge($defaultHeaders, $this->headers_) as $key => $value) {
             $headers[] = "$key: $value";
         }
@@ -203,7 +209,10 @@ class THttpClientAsync extends TTransport {
 
         if ($this->_ensureSocketCreated()) {
             $this->_writeStream($body);
+        } else if ($this->debug_) {
+            error_log("Failed to create socket");
         }
+
         $this->buf_ = '';
     }
 
@@ -232,21 +241,24 @@ class THttpClientAsync extends TTransport {
                 // operation for the write to fail on a broken pipe or timeout
                 $written = @fwrite($fd, $buffer, self::MAX_BYTES_PER_WRITE);
 
-                if ($written === FALSE) {
+                if ($written > 0){
+                    $sent += $written;
+                    $buffer = substr($buffer, $written);
 
+                } else if ($written === FALSE) {
                     if ($this->debug_) {
                         error_log("Write failed.");
                     }
                     $failed = TRUE;
 
-                } else if ($written > 0){
-
-                    $sent += $written;
-                    $buffer = substr($buffer, $written);
-
                 } else if ($written === 0) {
                     if ($this->debug_) {
                         error_log("Zero bytes written to socket. sent=$sent total=$total");
+                    }
+                    $failed = TRUE;
+                } else {
+                    if ($this->debug_) {
+                        error_log("Unexpected fwrite return value '$written'");
                     }
                     $failed = TRUE;
                 }
@@ -269,6 +281,49 @@ class THttpClientAsync extends TTransport {
     }
 
     /**
+     * Intended for debugging purposes only. The response is ignored in normal
+     * production circumstances as not to block the calling process.
+     */
+    protected function _readStream() {
+        if (!$this->debug_) {
+            error_log('Intended as a debug-only function');
+            return;
+        }
+
+        if (!is_resource($this->socket_)) {
+            error_log("Invalid socket handle");
+            return;
+        }
+
+        $buffer = "";
+        $start = microtime(TRUE);
+        while (!feof($this->socket_)) {
+            $meta = stream_get_meta_data($this->socket_);
+            error_log("socket status (". sprintf("%.2f", microtime(TRUE) - $start) . "s): ". json_encode($meta));
+
+            $read = fread($this->socket_, 8192);
+            if (strlen($read) == 0) {
+                usleep(1e5);
+            }
+            $buffer .= $read;
+        }
+        $end = microtime(TRUE);
+        error_log("Read took: " . ($end - $start) . " seconds.");
+
+        $meta = stream_get_meta_data($this->socket_);
+        $headers = array();
+        foreach (explode("\n", $buffer) as $line) {
+            $pair = explode(":", $line);
+            if (count($pair) == 2) {
+                $key = $pair[0];
+                $value = $pair[1];
+                $headers[$key] = $value;
+            }
+        }
+        error_log("Response headers: " . json_encode($headers));
+    }
+
+    /**
      * Create the persistent socket connection if necessary.  Otherwise, do
      * nothing.
      */
@@ -283,7 +338,7 @@ class THttpClientAsync extends TTransport {
 
         // Ignore the Thrift specified timeout ($this->timeout_) and use the
         // socket-specific timeout set in this file.
-        $timeout = self::DEFAULT_TIMEOUT_SECS;
+        $timeout = self::DEFAULT_CONNECT_TIMEOUT_SECS;
 
         for ($retry = 0; $retry < self::MAX_SOCKET_OPEN_RETRIES; $retry++) {
             try {
@@ -291,6 +346,8 @@ class THttpClientAsync extends TTransport {
                 $fd = @pfsockopen($sockaddr, $port, $errno, $errstr, $timeout);
                 if ($errno == 0 && is_resource($fd)) {
                     // Connection okay - break out of the retry loop
+                    stream_set_blocking($fd, 0);
+                    stream_set_timeout($fd, 0, self::DEFAULT_STREAM_TIMEOUT_MICROS);
                     $this->socket_ = $fd;
                     break;
                 }

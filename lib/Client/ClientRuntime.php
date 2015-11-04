@@ -288,6 +288,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
      */
     public function _generateStableUUID($token, $group) {
         $pid = getmypid();
+        $hostinfo = php_uname('a');
 
         // It would be better to use GMP, but this adds a client dependency
         // http://www.sitepoint.com/create-unique-64bit-integer-string/
@@ -298,7 +299,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         // can be determined reliably in a platform independent manner.
         return sprintf("%08x%08x",
             crc32(sprintf("%d%s", $pid, $group)),
-            crc32(sprintf("%s%d", $token, $pid)));
+            crc32(sprintf("%s%d", $pid, $token, $hostinfo)));
     }
 
     /**
@@ -396,6 +397,10 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         $port = $this->_options['service_port'];
         $secure = $this->_options['secure'];
         $debug = $this->_debug;
+
+        if ($debug) {
+            error_log("Connecting to $host:$port");
+        }
 
         $socket = new THttpClientAsync($host, $port, '/_rpc/v1/crouton/binary', $secure, $debug);
         $protocol = new \Thrift\Protocol\TBinaryProtocol($socket);
