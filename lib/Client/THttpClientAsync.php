@@ -195,6 +195,7 @@ class THttpClientAsync extends TTransport {
                                 'User-Agent' => 'PHP/THttpClient',
                                 'Content-Type' => 'application/x-thrift',
                                 'Content-Length' => TStringFuncFactory::create()->strlen($this->buf_),
+                                'Connection' => 'close',
                             );
         foreach (array_merge($defaultHeaders, $this->headers_) as $key => $value) {
             $headers[] = "$key: $value";
