@@ -100,8 +100,21 @@ class THttpClientAsync extends TTransport {
      */
     protected $debug_;
 
-    protected $emptyResponse_;
+
+    /**
+     * Buffer containing the RPC response before it is read back by read()
+     * calls.  THttpClientAsync populates this with a fixed empty response on
+     * every flush() to avoid the overhead of the actual readback.
+     */
     protected $respBuffer_;
+
+    /**
+     * Hard-coded binary representation of an empty response from the server.
+     * Using this as a proxy for the actual response allows the rest of the
+     * Thrift of the pipeline to continue on its way without waiting for the
+     * actual socket data.
+     */
+    protected $emptyResponse_;
 
     /**
      * Make a new HTTP client.
@@ -119,14 +132,15 @@ class THttpClientAsync extends TTransport {
         $this->port_ = $port;
         $this->uri_ = $uri;
         $this->buf_ = '';
+        $this->respBuffer_ = '';
         $this->timeout_ = null;
         $this->headers_ = array();
         $this->socket_ = null;
         $this->debug_ = $debug;
 
         // Hard-coded empty thrift ReportResponse in the binary protocol.
+        // Ideally this would be generated dynamically based on the active RPC.
         $this->emptyResponse_ = "\x80\x01\x00\x02\x00\x00\x00\x06\x52\x65\x70\x6f\x72\x74\x00\x00\x00\x00\x0c\x00\x00\x0c\x00\x02\x0a\x00\x01\x00\x05\x23\xbf\x9d\x4b\x96\x51\x0a\x00\x02\x00\x05\x23\xbf\x9d\x4b\x96\x96\x00\x00\x00\x00";
-        $this->respBuffer_ = "";
     }
 
     public function __destruct() {
@@ -173,6 +187,13 @@ class THttpClientAsync extends TTransport {
     * @throws TTransportException if cannot read any more data
     */
     public function read($len) {
+        // Do a non-blocking read to clear any buffering, even though
+        // the code doesn't use the results
+        if (is_resource($this->socket_)) {
+            @fread($this->socket_, max($len, 8192));
+        }
+
+        // Return data from the hard-coded response buffer
         $part = substr($this->respBuffer_, 0, $len);
         $this->respBuffer_ = substr($this->respBuffer_, $len);
         return $part;
@@ -202,7 +223,6 @@ class THttpClientAsync extends TTransport {
                                 'User-Agent' => 'PHP/THttpClient',
                                 'Content-Type' => 'application/x-thrift',
                                 'Content-Length' => TStringFuncFactory::create()->strlen($this->buf_),
-                                'Connection' => 'close',
                             );
         foreach (array_merge($defaultHeaders, $this->headers_) as $key => $value) {
             $headers[] = "$key: $value";
@@ -215,8 +235,10 @@ class THttpClientAsync extends TTransport {
         $body .= "\r\n";
         $body .= $this->buf_;
 
+        // Set the hard-coded response.
+        $this->respBuffer_ = $this->emptyResponse_;
+
         if ($this->_ensureSocketCreated()) {
-            $this->respBuffer_ = $this->emptyResponse_;
             $this->_writeStream($body);
         } else if ($this->debug_) {
             error_log("Failed to create socket");
@@ -245,6 +267,11 @@ class THttpClientAsync extends TTransport {
         $sent = 0;
 
         while (!$failed && $sent < $total) {
+
+            if (!is_resource($fd)) {
+                $failed = TRUE;
+            }
+
             try {
                 // Supress any error messages as it is considered part of normal
                 // operation for the write to fail on a broken pipe or timeout
@@ -373,6 +400,10 @@ class THttpClientAsync extends TTransport {
      * socket itself, as it is persisted, but the handle this process has to it.
      */
     protected function _closeSocket() {
+        if ($this->debug_) {
+            error_log("Closing socket.");
+        }
+
         $fd = $this->socket_;
         if (is_resource($fd)) {
             $this->socket_ = null;
