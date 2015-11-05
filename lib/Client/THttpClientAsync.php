@@ -100,6 +100,9 @@ class THttpClientAsync extends TTransport {
      */
     protected $debug_;
 
+    protected $emptyResponse_;
+    protected $respBuffer_;
+
     /**
      * Make a new HTTP client.
      *
@@ -120,6 +123,10 @@ class THttpClientAsync extends TTransport {
         $this->headers_ = array();
         $this->socket_ = null;
         $this->debug_ = $debug;
+
+        // Hard-coded empty thrift ReportResponse in the binary protocol.
+        $this->emptyResponse_ = "\x80\x01\x00\x02\x00\x00\x00\x06\x52\x65\x70\x6f\x72\x74\x00\x00\x00\x00\x0c\x00\x00\x0c\x00\x02\x0a\x00\x01\x00\x05\x23\xbf\x9d\x4b\x96\x51\x0a\x00\x02\x00\x05\x23\xbf\x9d\x4b\x96\x96\x00\x00\x00\x00";
+        $this->respBuffer_ = "";
     }
 
     public function __destruct() {
@@ -166,9 +173,9 @@ class THttpClientAsync extends TTransport {
     * @throws TTransportException if cannot read any more data
     */
     public function read($len) {
-        // The THttpClientAsync does not support reading back (the RPC responses)
-        // need to be ignored if this Transport is used.
-        return str_repeat("\0", $len);
+        $part = substr($this->respBuffer_, 0, $len);
+        $this->respBuffer_ = substr($this->respBuffer_, $len);
+        return $part;
     }
 
     /**
@@ -209,6 +216,7 @@ class THttpClientAsync extends TTransport {
         $body .= $this->buf_;
 
         if ($this->_ensureSocketCreated()) {
+            $this->respBuffer_ = $this->emptyResponse_;
             $this->_writeStream($body);
         } else if ($this->debug_) {
             error_log("Failed to create socket");
