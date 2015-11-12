@@ -19,7 +19,7 @@ class InitializationTest extends PHPUnit_Framework_TestCase {
         $runtime->flush();
 
         $runtime->options(array(
-            'group_name' => 'init_test_group', 
+            'group_name' => 'init_test_group',
             'access_token' => '1234567890',
         ));
         $runtime->flush();
@@ -28,14 +28,16 @@ class InitializationTest extends PHPUnit_Framework_TestCase {
     public function testMultipleInitCalls() {
 
         $runtime = Traceguide::newRuntime(NULL, NULL);
+        $this->assertGreaterThan(0, peek($runtime, "_options")['max_log_records']);
+        $this->assertGreaterThan(0, peek($runtime, "_options")['max_span_records']);
 
         for ($i = 0; $i < 100; $i++) {
             $runtime->infof("log%03d", 3 * $i);
-            
+
             // Redundant calls are fine as long as the configuration
             // is the same
             $runtime->options(array(
-                'group_name'   => 'init_test_group', 
+                'group_name'   => 'init_test_group',
                 'access_token' => '1234567890',
             ));
 

@@ -112,7 +112,7 @@ class ClientSpan implements \TraceguideBase\ActiveSpan {
         $text = vsprintf($fmt, $allArgs);
 
         $this->_runtime->_rawLogRecord(array(
-            'span_guid' => $this->_guid,
+            'span_guid' => strval($this->_guid),
             'level' => $level,
             'error_flag' => $errorFlag,
             'message' => $text,
@@ -121,21 +121,23 @@ class ClientSpan implements \TraceguideBase\ActiveSpan {
     }
 
     public function toThrift() {
+        // Coerce all the types to strings to ensure there are no encoding/decoding
+        // issues
         $joinIds = array();
         foreach ($this->_joinIds as $key => $value) {
             $pair = new \CroutonThrift\TraceJoinId(array(
-                "TraceKey" => $key,
-                "Value"    => $value,
+                "TraceKey" => strval($key),
+                "Value"    => strval($value),
             ));
             array_push($joinIds, $pair);
         }
 
         $rec = new \CroutonThrift\SpanRecord(array(
-            "runtime_guid" => $this->_runtime->guid(),
-            "span_guid" => $this->_guid,
-            "span_name" => $this->_operation,
-            "oldest_micros" => $this->_startMicros,
-            "youngest_micros" => $this->_endMicros,
+            "runtime_guid" => strval($this->_runtime->guid()),
+            "span_guid" => strval($this->_guid),
+            "span_name" => strval($this->_operation),
+            "oldest_micros" => intval($this->_startMicros),
+            "youngest_micros" => intval($this->_endMicros),
             "join_ids" => $joinIds,
             "error_flag" => $this->_errorFlag,
         ));

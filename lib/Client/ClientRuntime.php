@@ -5,9 +5,8 @@ require_once(dirname(__FILE__) . "/../api.php");
 require_once(dirname(__FILE__) . "/ClientSpan.php");
 require_once(dirname(__FILE__) . "/NoOpSpan.php");
 require_once(dirname(__FILE__) . "/Util.php");
-require_once(dirname(__FILE__) . "/THttpClientAsync.php");
-require_once(dirname(__FILE__) . "/../../thrift/CroutonThrift/Types.php");
-require_once(dirname(__FILE__) . "/../../thrift/CroutonThrift/ReportingService.php");
+require_once(dirname(__FILE__) . "/Transports/TransportThrift.php");
+require_once(dirname(__FILE__) . "/Transports/TransportUDP.php");
 
 /**
  * Main implementation of the Runtime interface
@@ -23,7 +22,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
     protected $_startTime = 0;
     protected $_thriftAuth = null;
     protected $_thriftRuntime = null;
-    protected $_thriftClient = null;
+    protected $_transport = null;
 
     protected $_reportStartTime = 0;
     protected $_logRecords = array();
@@ -33,20 +32,23 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         'dropped_counters' => 0,
     );
 
-    protected $_nextFlushMicros = 0;
-    protected $_flushPeriodMicros = 0;
+    protected $_lastFlushMicros = 0;
+    protected $_minFlushPeriodMicros = 0;
+    protected $_maxFlushPeriodMicros = 0;
 
     public function __construct($options = array()) {
         $this->_util = new Util();
 
-        $this->_options = array_merge(array(
-            'service_host'          => 'api.traceguide.io',
-            'service_port'          => 9998,
-            'secure'                => false,
+        $defaults = array(
+            'service_host'              => 'api.traceguide.io',
+            'service_port'              => 9998,
+            'secure'                    => false,
 
-            'max_log_records'       => 1000,
-            'max_span_records'      => 1000,
-            'reporting_period_secs' => 5.0,
+            'transport'                 => 'thrift',
+            'max_log_records'           => 1000,
+            'max_span_records'          => 1000,
+            'min_reporting_period_secs' => 0.1,
+            'max_reporting_period_secs' => 5.0,
 
             // PHP-specific configuration
             //
@@ -59,25 +61,36 @@ class ClientRuntime implements \TraceguideBase\Runtime {
             // logging "noise" to the calling code.
             'debug'                 => false,
 
-        ), $options);
+            // Flag intended solely to unit testing convenience
+            'debug_disable_flush'   => false,
+        );
 
-        // If port was not set, and secure was, choose the port appropriately
-        if (!isset($options['service_port'])) {
-            $this->_options['service_port'] = ($this->_options['secure'] ? 9997 : 9998);
+        // Modify some of the interdependent defaults based on what the user-specified
+        if (isset($options['secure'])) {
+            $defaults['service_port'] = $option['secure'] ? 9997 : 9998;
+        }
+        // UDP has significantly lower size contraints
+        if (isset($options['transport']) && $options['transport'] == 'udp') {
+            $defaults['service_port'] = 9996;
+            $defaults['max_log_records'] = 16;
+            $defaults['max_span_records'] = 16;
         }
 
-        $this->_debug = $this->_options['debug'];
+        // Set the options, merged with the defaults
+        $this->options(array_merge($defaults, $options));
 
-        $this->_flushPeriodMicros = $this->_options["reporting_period_secs"] * 1e6;
-        $this->_nextFlushMicros = $this->_util->nowMicros() + $this->_flushPeriodMicros;
+        if ($this->_options['transport'] == 'udp') {
+            $this->_transport = new Transports\TransportUDP();
+        } else {
+            $this->_transport = new Transports\TransportThrift();
+        }
 
         // Note: the GUID is not generated until the library is initialized
         // as it depends on the access token
         $this->_guid = 0;
         $this->_startTime = $this->_util->nowMicros();
         $this->_reportStartTime = $this->_startTime;
-
-        $this->options($options);
+        $this->_lastFlushMicros = $this->_startTime;
 
         // PHP is (in many real-world contexts) single-threaded and
         // does not have an event loop like Node.js.  Flush on exit.
@@ -92,16 +105,36 @@ class ClientRuntime implements \TraceguideBase\Runtime {
     }
 
     public function options($options) {
+
+        $this->_options = array_merge($this->_options, $options);
+
         // Deferred group name / access token initialization is supported (i.e.
         // it is possible to create logs/spans before setting this info).
         if (isset($options['access_token']) && isset($options['group_name'])) {
-            $this->_initThriftIfNeeded($options['group_name'], $options['access_token']);
+            $this->_initThriftDataIfNeeded($options['group_name'], $options['access_token']);
+        }
+
+        if (isset($options['min_reporting_period_secs'])) {
+            $this->_minFlushPeriodMicros = $options['min_reporting_period_secs'] * 1e6;
+        }
+        if (isset($options['max_reporting_period_secs'])) {
+            $this->_maxFlushPeriodMicros = $options['max_reporting_period_secs'] * 1e6;
         }
 
         $this->_debug = $this->_options['debug'];
+
+        // Coerce invalid options into stable values
+        if (!($this->_options['max_log_records'] > 0)) {
+            $this->_options['max_log_records'] = 1;
+            $this->_debugRecordError('Invalid value for max_log_records');
+        }
+        if (!($this->_options['max_span_records'] > 0)) {
+            $this->_options['max_span_records'] = 1;
+            $this->_debugRecordError('Invalid value for max_span_records');
+        }
     }
 
-    private function _initThriftIfNeeded($groupName, $accessToken) {
+    private function _initThriftDataIfNeeded($groupName, $accessToken) {
 
         // Pre-conditions
         if (!is_string($accessToken)) {
@@ -116,7 +149,6 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         if (!(strlen($groupName) > 0)) {
             throw new \Exception('group_name must be non-zero in length');
         }
-
 
         // Potentially redundant initialization info: only complain if
         // it is inconsistent.
@@ -135,12 +167,12 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         $this->_guid = $this->_generateStableUUID($accessToken, $groupName);
 
         $this->_thriftAuth = new \CroutonThrift\Auth(array(
-            'access_token' => $accessToken,
+            'access_token' => strval($accessToken),
         ));
         $this->_thriftRuntime = new \CroutonThrift\Runtime(array(
-            'guid' => $this->_guid,
-            'start_micros' => $this->_startTime,
-            'group_name' => $groupName,
+            'guid' => strval($this->_guid),
+            'start_micros' => intval($this->_startTime),
+            'group_name' => strval($groupName),
         ));
     }
 
@@ -210,8 +242,27 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         }
 
         $now = $this->_util->nowMicros();
-        if ($now >= $this->_nextFlushMicros) {
+        $delta = $now - $this->_lastFlushMicros;
+
+        // Set a bound on maximum flush frequency
+        if ($delta < $this->_minFlushPeriodMicros) {
+            return;
+        }
+
+        // Set a bound of minimum flush frequency
+        if ($delta > $this->_maxFlushPeriodMicros) {
             $this->flush();
+            return;
+        }
+
+        // Look for a trigger that a flush is warranted
+        if (count($this->_logRecords) >= $this->_options["max_log_records"]) {
+            $this->flush();
+            return;
+        }
+        if (count($this->_spanRecords) >= $this->_options["max_span_records"]) {
+            $this->flush();
+            return;
         }
     }
 
@@ -221,7 +272,6 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         }
 
         $now = $this->_util->nowMicros();
-        $this->_nextFlushMicros = $now + $this->_flushPeriodMicros;
 
         // The thrift configuration has not yet been set: allow logs and spans
         // to be buffered in this case, but flushes won't yet be possible.
@@ -232,33 +282,42 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         if (count($this->_logRecords) == 0 && count($this->_spanRecords) == 0) {
             return;
         }
-        $this->ensureConnection();
+
+        // For unit testing
+        if ($this->_options['debug_disable_flush']) {
+            return;
+        }
+
+        $this->_transport->ensureConnection($this->_options);
 
         // Convert the counters to thrift form
         $thriftCounters = array();
         foreach ($this->_counters as $key => $value) {
             array_push($thriftCounters, new \CroutonThrift\NamedCounter(array(
-                'Name' => $key,
-                'Value' => $value,
+                'Name' => strval($key),
+                'Value' => intval($value),
             )));
         }
         $reportRequest = new \CroutonThrift\ReportRequest(array(
             'runtime'         => $this->_thriftRuntime,
-            'oldest_micros'   => $this->_reportStartTime,
-            'youngest_micros' => $now,
+            'oldest_micros'   => intval($this->_reportStartTime),
+            'youngest_micros' => intval($now),
             'log_records'     => $this->_logRecords,
             'span_records'    => $this->_spanRecords,
             'counters'        => $thriftCounters,
         ));
 
+        $this->_lastFlushMicros = $now;
+
         $resp = null;
         try {
-            $resp = $this->_thriftClient->Report($this->_thriftAuth, $reportRequest);
-        } catch (\Thrift\Exception\TTransportException $e) {
-            // Ignore errors since the TTransport does not support readback
-            $this->_debugRecordError($e);
+            // It *is* valid for the transport to return a null response in the
+            // case of a low-overhead "fire and forget" report
+            $resp = $this->_transport->flushReport($this->_thriftAuth, $reportRequest);
         } catch (\Exception $e) {
-            // Ignore errors since the TTransport does not support readback
+            // Exceptions *are* expected as connections can be broken, etc. when
+            // reporting. Prevent reporting exceptions from interfering with the
+            // client code.
             $this->_debugRecordError($e);
         }
 
@@ -359,8 +418,8 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         }
 
         $fields = array_merge(array(
-            'timestamp_micros' => $this->_util->nowMicros(),
-            'runtime_guid' => $this->_guid,
+            'timestamp_micros' => intval($this->_util->nowMicros()),
+            'runtime_guid' => strval($this->_guid),
         ), $fields);
 
         // TODO: data scrubbing and size limiting
@@ -379,37 +438,17 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         }
 
         $rec = new \CroutonThrift\LogRecord($fields);
-        $full = $this->pushWithMax($this->_logRecords, $rec, $this->_options["max_log_records"]);
+        $full = $this->pushWithMax($this->_logRecords, $rec, $this->_options['max_log_records']);
         if ($full) {
             $this->_counters['dropped_logs']++;
         }
     }
 
-    protected function ensureConnection() {
-        if (!is_null($this->_thriftClient)) {
-            return;
-        }
-        $this->_thriftClient = $this->createConnection();
-    }
-
-    protected function createConnection() {
-        $host = $this->_options['service_host'];
-        $port = $this->_options['service_port'];
-        $secure = $this->_options['secure'];
-        $debug = $this->_debug;
-
-        if ($debug) {
-            error_log("Connecting to $host:$port");
-        }
-
-        $socket = new THttpClientAsync($host, $port, '/_rpc/v1/crouton/binary', $secure, $debug);
-        $protocol = new \Thrift\Protocol\TBinaryProtocol($socket);
-        $client = new \CroutonThrift\ReportingServiceClient($protocol);
-
-        return $client;
-    }
-
     protected function pushWithMax(&$arr, $item, $max) {
+        if (!($max > 0)) {
+            $max = 1;
+        }
+
         array_push($arr, $item);
 
         // Simplistic random discard
