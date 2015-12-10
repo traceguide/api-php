@@ -14,7 +14,7 @@ composer require traceguide/api-php
 require __DIR__ . '/vendor/autoload.php';
 
 Traceguide::initialize('examples/trivial_process', '{{access_token_goes_here}}');
-Traceguide::infof("Initialized! Unix time = %d", time());
+Traceguide::infof("The current unix time = %d", time());
 
 $span = Traceguide::startSpan();
 $span->setOperation("trivial/loop");
@@ -31,7 +31,3 @@ $span->finish();
 [The MIT License](LICENSE).
 
 Copyright (c) 2015, Resonance Labs.
-
-
-
-
