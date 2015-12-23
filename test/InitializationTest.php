@@ -44,4 +44,26 @@ class InitializationTest extends PHPUnit_Framework_TestCase {
            $runtime->infof("log%03d", 7 * $i);
         }
     }
+
+    public function testSpanBufferingBeforeInit() {
+        $runtime = Traceguide::newRuntime(NULL, NULL);
+        $span = $runtime->startSpan();
+        $span->setOperation("first");
+        $span->infof('Hello %s', 'World');
+        $span->finish();
+
+        $runtime->options(array(
+            'group_name'   => 'init_test_group',
+            'access_token' => '1234567890',
+        ));
+
+        $span = $runtime->startSpan();
+        $span->setOperation("second");
+        $span->infof('Hola %s', 'Mundo');
+        $span->finish();
+
+
+        $this->assertEquals(2, count(peek($runtime, "_spanRecords")));
+        $runtime->flush();
+    }
 }

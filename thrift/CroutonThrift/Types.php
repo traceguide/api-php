@@ -1811,6 +1811,10 @@ class ReportResponse {
    * @var \CroutonThrift\Timing
    */
   public $timing = null;
+  /**
+   * @var string[]
+   */
+  public $errors = null;
 
   public function __construct($vals=null) {
     if (!isset(self::$_TSPEC)) {
@@ -1829,6 +1833,14 @@ class ReportResponse {
           'type' => TType::STRUCT,
           'class' => '\CroutonThrift\Timing',
           ),
+        3 => array(
+          'var' => 'errors',
+          'type' => TType::LST,
+          'etype' => TType::STRING,
+          'elem' => array(
+            'type' => TType::STRING,
+            ),
+          ),
         );
     }
     if (is_array($vals)) {
@@ -1837,6 +1849,9 @@ class ReportResponse {
       }
       if (isset($vals['timing'])) {
         $this->timing = $vals['timing'];
+      }
+      if (isset($vals['errors'])) {
+        $this->errors = $vals['errors'];
       }
     }
   }
@@ -1886,6 +1901,23 @@ class ReportResponse {
             $xfer += $input->skip($ftype);
           }
           break;
+        case 3:
+          if ($ftype == TType::LST) {
+            $this->errors = array();
+            $_size55 = 0;
+            $_etype58 = 0;
+            $xfer += $input->readListBegin($_etype58, $_size55);
+            for ($_i59 = 0; $_i59 < $_size55; ++$_i59)
+            {
+              $elem60 = null;
+              $xfer += $input->readString($elem60);
+              $this->errors []= $elem60;
+            }
+            $xfer += $input->readListEnd();
+          } else {
+            $xfer += $input->skip($ftype);
+          }
+          break;
         default:
           $xfer += $input->skip($ftype);
           break;
@@ -1907,9 +1939,9 @@ class ReportResponse {
       {
         $output->writeListBegin(TType::STRUCT, count($this->commands));
         {
-          foreach ($this->commands as $iter55)
+          foreach ($this->commands as $iter61)
           {
-            $xfer += $iter55->write($output);
+            $xfer += $iter61->write($output);
           }
         }
         $output->writeListEnd();
@@ -1922,6 +1954,23 @@ class ReportResponse {
       }
       $xfer += $output->writeFieldBegin('timing', TType::STRUCT, 2);
       $xfer += $this->timing->write($output);
+      $xfer += $output->writeFieldEnd();
+    }
+    if ($this->errors !== null) {
+      if (!is_array($this->errors)) {
+        throw new TProtocolException('Bad type in structure.', TProtocolException::INVALID_DATA);
+      }
+      $xfer += $output->writeFieldBegin('errors', TType::LST, 3);
+      {
+        $output->writeListBegin(TType::STRING, count($this->errors));
+        {
+          foreach ($this->errors as $iter62)
+          {
+            $xfer += $output->writeString($iter62);
+          }
+        }
+        $output->writeListEnd();
+      }
       $xfer += $output->writeFieldEnd();
     }
     $xfer += $output->writeFieldStop();

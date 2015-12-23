@@ -7,6 +7,7 @@ require_once(dirname(__FILE__) . "/NoOpSpan.php");
 require_once(dirname(__FILE__) . "/Util.php");
 require_once(dirname(__FILE__) . "/Transports/TransportThrift.php");
 require_once(dirname(__FILE__) . "/Transports/TransportUDP.php");
+require_once(dirname(__FILE__) . "/Version.php");
 
 /**
  * Main implementation of the Runtime interface
@@ -87,7 +88,6 @@ class ClientRuntime implements \TraceguideBase\Runtime {
 
         // Note: the GUID is not generated until the library is initialized
         // as it depends on the access token
-        $this->_guid = 0;
         $this->_startTime = $this->_util->nowMicros();
         $this->_reportStartTime = $this->_startTime;
         $this->_lastFlushMicros = $this->_startTime;
@@ -162,17 +162,31 @@ class ClientRuntime implements \TraceguideBase\Runtime {
             return;
         }
 
+        // Runtime attributes
+        $runtimeAttrs = array(
+            'cruntime_platform' => 'php',
+            'cruntime_version'  => TRACEGUIDE_VERSION,
+        );
+
         // Generate the GUID on thrift initialization as the GUID should be
         // stable for a particular access token / group name combo.
         $this->_guid = $this->_generateStableUUID($accessToken, $groupName);
-
         $this->_thriftAuth = new \CroutonThrift\Auth(array(
             'access_token' => strval($accessToken),
         ));
+
+        $thriftAttrs = array();
+        foreach ($runtimeAttrs as $key => $value) {
+            array_push($thriftAttrs, new \CroutonThrift\KeyValue(array(
+                'Key' => strval($key),
+                'Value' => strval($value),
+            )));
+        }
         $this->_thriftRuntime = new \CroutonThrift\Runtime(array(
             'guid' => strval($this->_guid),
             'start_micros' => intval($this->_startTime),
             'group_name' => strval($groupName),
+            'attrs' => $thriftAttrs,
         ));
     }
 
@@ -289,6 +303,19 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         }
 
         $this->_transport->ensureConnection($this->_options);
+
+        // Ensure the log / span GUIDs are set correctly. This is covers a real
+        // case: the runtime GUID cannot be generated until the access token
+        // and group name are set (so that is the same GUID between script
+        // invocations), but the library allows logs and spans to be buffered
+        // prior to setting those values.  Any such 'early buffered' spans need
+        // to have the GUID set; for simplicity, the code resets them all.
+        foreach ($this->_logRecords as $log) {
+            $log->runtime_guid = $this->_guid;
+        }
+        foreach ($this->_spanRecords as $span) {
+            $span->runtime_guid = $this->_guid;
+        }
 
         // Convert the counters to thrift form
         $thriftCounters = array();
