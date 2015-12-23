@@ -166,6 +166,7 @@ class ClientRuntime implements \TraceguideBase\Runtime {
         $runtimeAttrs = array(
             'cruntime_platform' => 'php',
             'cruntime_version'  => TRACEGUIDE_VERSION,
+            'php_version' => phpversion(),
         );
 
         // Generate the GUID on thrift initialization as the GUID should be
